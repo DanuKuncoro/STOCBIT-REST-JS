@@ -1,2 +1,27 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+Logs
+
+logs
+.log
+npm-debug.log
+
+Runtime data
+
+pids
+*.pid
+*.seed
+*.pid.lock
+
+Dependency directories
+
+node_modules/
+
+Environment variables (NEVER COMMIT THIS)
+
+.env
+
+OS Junk
+
+.DS_Store
+Thumbs.db
