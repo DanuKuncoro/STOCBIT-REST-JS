@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Zombie Hunter Radar</title>
+    <style>
+        body { background-color: #0d1117; color: #c9d1d9; font-family: 'Consolas', monospace; margin: 0; padding: 20px; }
+        
+        /* Header & Inputs */
+        .header { border-bottom: 2px solid #30363d; padding-bottom: 15px; margin-bottom: 20px; }
+        .top-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        h1 { margin: 0; color: #58a6ff; font-size: 24px; }
+
+        /* Control Bar */
+        .controls { display: flex; gap: 15px; background: #161b22; padding: 10px; border-radius: 6px; border: 1px solid #30363d; align-items: center; }
+        
+        .input-group { display: flex; flex-direction: column; gap: 4px; }
+        .input-group label { font-size: 11px; color: #8b949e; font-weight: bold; text-transform: uppercase; }
+        .input-group input { 
+            background: #0d1117; border: 1px solid #30363d; color: #c9d1d9; 
+            padding: 5px 8px; border-radius: 4px; font-family: inherit; width: 80px;
+        }a
+
+        /* Filter Buttons */
+        .cat-filters { display: flex; gap: 5px; margin-left: auto; }
+        .filter-btn {
+            background: #21262d; border: 1px solid #30363d; color: #8b949e;
+            padding: 5px 12px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 12px;
+        }
+        .filter-btn:hover { background: #30363d; color: #c9d1d9; }
+        .filter-btn.active { background: #1f6feb; color: #ffffff; border-color: #1f6feb; }
+        
+        /* Table */
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th { text-align: left; color: #8b949e; border-bottom: 1px solid #30363d; padding: 10px; font-size: 12px; }
+        td { padding: 8px 10px; border-bottom: 1px solid #21262d; font-size: 14px; }
+        
+        .new-row { animation: flash 1s ease-out; }
+        @keyframes flash { 0% { background-color: rgba(56, 139, 253, 0.4); } 100% { background-color: transparent; } }
+
+        /* Colors */
+        .cat-sleeping { color: #ff7b72; } 
+        .cat-penny { color: #d2a8ff; }    
+        .cat-premium { color: #7ee787; }
+        .pos-change { color: #7ee787; }
+        .neg-change { color: #ff7b72; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div class="top-row">
+            <div>
+                <h1>🧟 ZOMBIE HUNTER</h1>
+                <div id="status" style="color: #7ee787; font-size: 12px;">● LIVE STREAM</div>
+            </div>
+            <div class="cat-filters">
+                <button class="filter-btn active" onclick="setCat('all')">ALL</button>
+                <button class="filter-btn" onclick="setCat('sleeping')">💀 SLEEPING</button>
+                <button class="filter-btn" onclick="setCat('penny')">🪙 PENNY</button>
+                <button class="filter-btn" onclick="setCat('premium')">💎 PREMIUM</button>
+            </div>
+        </div>
+
+        <div class="controls">
+            <div class="input-group">
+                <label>Min Lot</label>
+                <input type="number" id="minLot" value="1" oninput="applyFilters()">
+            </div>
+            <div class="input-group">
+                <label>Min % Change</label>
+                <input type="number" id="minChange" value="0" step="0.5" oninput="applyFilters()">
+            </div>
+            <div class="input-group">
+                <label>Min Val (Juta)</label>
+                <input type="number" id="minValue" value="0" step="10" oninput="applyFilters()">
+            </div>
+            <div style="margin-left:auto; font-size:12px; color:#8b949e;">
+                Visible: <span id="visibleCount">0</span> rows
+            </div>
+        </div>
+    </div>
+
+    <table id="tradeTable">
+        <thead>
+            <tr>
+                <th width="10%">TIME</th>
+                <th width="10%">CAT</th>
+                <th width="10%">TICKER</th>
+                <th width="10%">PRICE</th>
+                <th width="10%">CHG %</th>
+                <th width="15%">VOL (LOT)</th>
+                <th width="15%">VALUE</th>
+            </tr>
+        </thead>
+        <tbody id="radar"></tbody>
+    </table>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const tbody = document.getElementById('radar');
+        const countSpan = document.getElementById('visibleCount');
+        let activeCat = 'all';
+
+        // 1. MAIN FILTER LOGIC
+        function applyFilters() {
+            const minLot = parseFloat(document.getElementById('minLot').value) || 0;
+            const minChange = parseFloat(document.getElementById('minChange').value) || 0;
+            const minVal = parseFloat(document.getElementById('minValue').value) || 0;
+            
+            // Convert Million IDR to Raw Number (e.g. 100 -> 100,000,000)
+            const minValRaw = minVal * 1000000;
+
+            const rows = document.querySelectorAll('.trade-row');
+            let visible = 0;
+
+            rows.forEach(row => {
+                // Get Data from Attributes
+                const rCat = row.dataset.cat;
+                const rLot = parseFloat(row.dataset.lot);
+                const rChange = Math.abs(parseFloat(row.dataset.change)); // Absolute value for change
+                const rVal = parseFloat(row.dataset.val);
+
+                // Logic Check
+                const catMatch = (activeCat === 'all' || rCat === activeCat);
+                const lotMatch = rLot >= minLot;
+                const changeMatch = rChange >= minChange;
+                const valMatch = rVal >= minValRaw;
+
+                if (catMatch && lotMatch && changeMatch && valMatch) {
+                    row.style.display = '';
+                    visible++;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+            
+            countSpan.innerText = visible;
+        }
+
+        // 2. CATEGORY SWITCHER
+        function setCat(cat) {
+            activeCat = cat;
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if(btn.innerText.toLowerCase().includes(cat) || (cat === 'all' && btn.innerText === 'ALL')) 
+                    btn.classList.add('active');
+            });
+            applyFilters();
+        }
+
+        // 3. INCOMING DATA
+        socket.on('market_update', (alerts) => {
+            alerts.forEach(alert => {
+                const row = document.createElement('tr');
+                row.className = 'new-row trade-row';
+                
+                // STORE RAW DATA IN ATTRIBUTES FOR FILTERING
+                row.dataset.cat = alert.category;
+                row.dataset.lot = alert.volume;
+                row.dataset.change = alert.change || 0;
+                row.dataset.val = alert.valueRaw || 0;
+
+                // Visuals
+                const timeStr = new Date(alert.time).toLocaleTimeString('en-GB');
+                const catClass = `cat-${alert.category}`;
+                const chgColor = (alert.change > 0) ? 'pos-change' : ((alert.change < 0) ? 'neg-change' : '');
+                const chgSign = (alert.change > 0) ? '+' : '';
+
+                let volDisplay = alert.volume;
+                if (alert.type === 'CLUSTER') volDisplay = `<span style="background:#d29922;color:#000;padding:2px 4px;border-radius:4px;font-weight:bold">RUSH ${alert.count}x</span>`;
+
+                row.innerHTML = `
+                    <td style="color: #8b949e;">${timeStr}</td>
+                    <td class="${catClass}"><b>${alert.category.toUpperCase()}</b></td>
+                    <td><strong style="font-size:16px">${alert.symbol}</strong></td>
+                    <td>${alert.price}</td>
+                    <td class="${chgColor}">${chgSign}${alert.change}%</td>
+                    <td>${volDisplay}</td>
+                    <td>${alert.value}</td>
+                `;
+
+                tbody.insertBefore(row, tbody.firstChild);
+                
+                // Cleanup
+                if (tbody.children.length > 200) tbody.removeChild(tbody.lastChild);
+            });
+            
+            // Re-apply filters to hide the new row if it doesn't match
+            applyFilters();
+        });
+    </script>
+</body>
+</html>
