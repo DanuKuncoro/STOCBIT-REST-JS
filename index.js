@@ -5,9 +5,7 @@ const auth = require('./lib/auth');
 const api = require('./lib/api');
 const analyzer = require('./logic/analyzer');
 
-// ----------------------------------------------------
-// 🛠️ HELPER: FOLDER SCANNER
-// ----------------------------------------------------
+// HELPER: FOLDER SCANNER
 function loadFromFolder(folderName) {
     const dirPath = path.join(__dirname, 'data', folderName);
     const uniqueTickers = new Set(); 
@@ -39,7 +37,7 @@ function loadFromFolder(folderName) {
                     .replace('.JK', '')
                     .trim();
 
-                if (symbol.length >= 4 && /^[A-Z0-9]+$/.test(symbol)) {
+                if (symbol.length >= 4) {
                     uniqueTickers.add(symbol);
                 }
             });
@@ -55,7 +53,7 @@ function loadFromFolder(folderName) {
 
 async function start() {
     console.log("---------------------------------------");
-    console.log("🧟 ZOMBIE HUNTER: 1-SECOND BURST MODE");
+    console.log("🧟 ZOMBIE HUNTER: CLI MODE");
     console.log("---------------------------------------");
 
     // 1. AUTHENTICATION
@@ -78,34 +76,36 @@ async function start() {
         console.log("✅ Token loaded.");
     }
 
-    // 2. LOAD DATA
+    // 2. LOAD DATA (FIXED TO USE A SET)
     console.log("📂 Loading Watchlists...");
     
-    const watchlists = {
-        sleeping: loadFromFolder('sleeping'),
-        penny:    loadFromFolder('penny'),
-        premium:  loadFromFolder('premium')
-    };
+    // Create a MASTER SET to pass to analyzer
+    const masterIgnoreSet = new Set();
+    
+    const sleeping = loadFromFolder('sleeping');
+    const penny    = loadFromFolder('penny');
+    const premium  = loadFromFolder('premium');
 
-    const total = watchlists.sleeping.length + watchlists.penny.length + watchlists.premium.length;
+    // Merge into the set
+    sleeping.forEach(t => masterIgnoreSet.add(t));
+    penny.forEach(t => masterIgnoreSet.add(t));
+    premium.forEach(t => masterIgnoreSet.add(t));
 
-    console.log(`   💀 [SLEEPING] : ${watchlists.sleeping.length}`);
-    console.log(`   🪙 [PENNY]    : ${watchlists.penny.length}`);
-    console.log(`   💎 [PREMIUM]  : ${watchlists.premium.length}`);
-    console.log(`   🔥 TOTAL      : ${total}`);
-
-    if (total === 0) console.log("⚠️  No CSV files found in data/ folders.");
+    console.log(`   💀 [SLEEPING] : ${sleeping.length}`);
+    console.log(`   🪙 [PENNY]    : ${penny.length}`);
+    console.log(`   💎 [PREMIUM]  : ${premium.length}`);
+    console.log(`   🚫 TOTAL IGNORED : ${masterIgnoreSet.size} unique tickers`);
 
     // 3. START STREAM
-    console.log("\n🚀 STARTING HIGH-SPEED STREAM (1s)...");
+    console.log("\n🚀 STARTING STREAM...");
     
-    // FAST POLLING: 1000ms
     setInterval(async () => {
         try {
             const trades = await api.fetchRunningTrade(token);
             
             if (trades && trades.length > 0) {
-                const alerts = analyzer.analyze(trades, watchlists);
+                // FIXED: Pass the SET, not the Object
+                const alerts = analyzer.analyze(trades, masterIgnoreSet);
                 if (alerts.length > 0) {
                     alerts.forEach(alert => console.log(alert.msg));
                 }
@@ -116,7 +116,7 @@ async function start() {
                 process.exit(1);
             }
         }
-    }, 1000); // <--- 1 SECOND INTERVAL
+    }, 1000); 
 }
 
 start();

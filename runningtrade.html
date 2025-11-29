@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STOCBIT | Running Trade</title>
+    <style>
+        :root {
+            --bg-dark: #0b0e11;
+            --bg-panel: #151a1f;
+            --text-main: #EAECEF;
+            --text-muted: #848E9C;
+            --up-color: #0ECB81;   /* Green */
+            --down-color: #F6465D; /* Red */
+            --accent: #F0B90B;     /* Yellow */
+            --input-bg: #2a343d;
+        }
+
+        body {
+            margin: 0;
+            background-color: var(--bg-dark);
+            font-family: 'DIN Pro', 'Roboto', monospace;
+            color: var(--text-main);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        /* --- HEADER --- */
+        header {
+            background-color: var(--bg-panel);
+            border-bottom: 1px solid #262d38;
+            padding: 8px 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 40px; 
+            z-index: 20;
+        }
+
+        .title {
+            font-size: 16px; 
+            font-weight: 700;
+            color: var(--text-muted);
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Filter Button */
+        .btn-filter {
+            background: #2b3139;
+            border: 1px solid #474d57;
+            color: var(--text-main);
+            padding: 6px 16px; 
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-filter:hover { background: #3a424d; }
+        .btn-filter.active { border-color: var(--accent); color: var(--accent); }
+
+        /* --- FILTER PANEL --- */
+        #filter-panel {
+            background: var(--bg-panel);
+            border-bottom: 1px solid #262d38;
+            padding: 12px 15px;
+            display: none; /* Hidden by default */
+            gap: 15px;
+            align-items: center;
+            font-size: 12px;
+            flex-wrap: wrap; 
+        }
+        #filter-panel.open { display: flex; }
+
+        .filter-group { display: flex; align-items: center; gap: 8px; }
+        .filter-label { color: var(--text-muted); font-weight: bold; white-space: nowrap; }
+        
+        input {
+            background: var(--input-bg);
+            border: 1px solid #474d57;
+            color: white;
+            padding: 6px 8px;
+            border-radius: 3px;
+            font-family: inherit;
+            font-size: 12px;
+            width: 90px;
+            text-transform: uppercase;
+        }
+        input:focus { outline: none; border-color: var(--accent); }
+
+        /* --- HEADERS --- */
+        .headers {
+            display: grid;
+            /* Defined Column Widths for Perfect Alignment */
+            /* Time | Code | Price | Chg% | Vol | Value */
+            grid-template-columns: 100px 90px 120px 110px 110px 1fr; 
+            padding: 10px 20px; /* Increased padding */
+            background: #111418;
+            border-bottom: 1px solid #222;
+            font-size: 13px; 
+            font-weight: bold;
+            color: var(--text-muted);
+            letter-spacing: 0.5px;
+        }
+        .h-right { text-align: right; }
+
+        /* --- TAPE AREA --- */
+        #tape-container {
+            flex: 1;
+            position: relative;
+            background: var(--bg-dark);
+        }
+        canvas { display: block; width: 100%; height: 100%; }
+
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="title">
+            RUNNING TRADE 
+            <span style="font-size:12px; color:var(--up-color); margin-left:10px">● LIVE</span>
+        </div>
+        <button class="btn-filter" id="btnFilter" onclick="toggleFilter()">FILTER</button>
+    </header>
+
+    <!-- Filter Controls -->
+    <div id="filter-panel">
+        <div class="filter-group">
+            <span class="filter-label">CODE:</span>
+            <input type="text" id="filterCode" placeholder="ALL" onkeyup="updateFilters()">
+        </div>
+        <div class="filter-group">
+            <span class="filter-label">MIN VOL:</span>
+            <input type="number" id="filterVol" placeholder="0" onkeyup="updateFilters()">
+        </div>
+        <div class="filter-group">
+            <span class="filter-label">MIN VAL:</span>
+            <input type="number" id="filterVal" placeholder="0" onkeyup="updateFilters()">
+        </div>
+        <div class="filter-group">
+            <span class="filter-label">CHANGE %:</span>
+            <input type="number" id="filterChg" placeholder="0" step="0.1" onkeyup="updateFilters()">
+        </div>
+    </div>
+
+    <!-- 6 Columns -->
+    <div class="headers">
+        <div>TIME</div>
+        <div>CODE</div>
+        <div class="h-right">PRICE</div>
+        <div class="h-right">CHANGE%</div>
+        <div class="h-right">VOL</div>
+        <div class="h-right">VALUE</div>
+    </div>
+
+    <div id="tape-container">
+        <canvas id="rtCanvas"></canvas>
+    </div>
+
+<script>
+    // --- CONFIGURATION ---
+    const CONFIG = {
+        rowHeight: 36, // Slightly taller for tidiness
+        fontSize: 15,  
+        maxRows: 100, 
+        colors: {
+            text: '#EAECEF',
+            muted: '#848E9C',
+            yellow: '#F0B90B',
+            green: '#0ECB81',
+            red: '#F6465D',
+            separator: '#1b2129'
+        }
+    };
+
+    // --- STATE ---
+    let trades = [];
+    let filter = {
+        code: '',
+        minVol: 0,
+        minVal: 0,
+        minChg: 0 
+    };
+
+    // --- DATA SIMULATION ---
+    const STOCK_UNIVERSE = [
+        { code: "BBCA", price: 9200 }, { code: "BBRI", price: 5400 },
+        { code: "BMRI", price: 6050 }, { code: "GOTO", price: 84 },
+        { code: "TLKM", price: 3950 }, { code: "ASII", price: 5600 },
+        { code: "UNTR", price: 23500 }, { code: "ANTM", price: 1650 },
+        { code: "BUMI", price: 120 }, { code: "BRPT", price: 1040 },
+        { code: "ADRO", price: 2450 }, { code: "PGAS", price: 1120 },
+        { code: "MEDC", price: 1350 }, { code: "AKRA", price: 1560 }
+    ];
+
+    function formatLargeValue(val) {
+        if (val >= 1_000_000_000) return (val / 1_000_000_000).toFixed(1) + 'B';
+        if (val >= 1_000_000) return (val / 1_000_000).toFixed(1) + 'M';
+        if (val >= 1_000) return (val / 1_000).toFixed(0) + 'K';
+        return val.toString();
+    }
+
+    function generateTrade() {
+        const stock = STOCK_UNIVERSE[Math.floor(Math.random() * STOCK_UNIVERSE.length)];
+        
+        // 1. Determine Price Change
+        const move = Math.random() > 0.6 ? (Math.random() > 0.5 ? 25 : -25) : 0;
+        let execPrice = stock.price + move;
+        if(execPrice < 50) execPrice = 50;
+
+        let changePct = 0;
+        if (move !== 0) {
+            changePct = (move / stock.price) * 100;
+        }
+
+        // 2. Action (Buy/Sell)
+        const side = Math.random() > 0.5 ? 'buy' : 'sell';
+
+        // 3. Volume Logic
+        const isWhale = Math.random() > 0.9;
+        const vol = isWhale ? Math.floor(Math.random() * 5000) + 1000 : Math.floor(Math.random() * 500) + 1;
+
+        // 4. Value Logic
+        const value = vol * 100 * execPrice;
+
+        const now = new Date();
+        const timeStr = [
+            now.getHours().toString().padStart(2, '0'),
+            now.getMinutes().toString().padStart(2, '0'),
+            now.getSeconds().toString().padStart(2, '0')
+        ].join(':');
+
+        const trade = {
+            id: Date.now() + Math.random(),
+            time: timeStr,
+            code: stock.code,
+            price: execPrice,
+            change: move,       
+            changePct: changePct, 
+            vol: vol,
+            value: value,
+            side: side          
+        };
+
+        trades.unshift(trade);
+        if (trades.length > CONFIG.maxRows) trades.pop();
+    }
+
+    // --- FILTER LOGIC ---
+    function toggleFilter() {
+        const panel = document.getElementById('filter-panel');
+        const btn = document.getElementById('btnFilter');
+        panel.classList.toggle('open');
+        btn.classList.toggle('active');
+    }
+
+    function updateFilters() {
+        const codeInput = document.getElementById('filterCode').value.toUpperCase();
+        const volInput = parseInt(document.getElementById('filterVol').value) || 0;
+        const valInput = parseInt(document.getElementById('filterVal').value) || 0;
+        const chgInput = parseFloat(document.getElementById('filterChg').value) || 0;
+        
+        filter.code = codeInput;
+        filter.minVol = volInput;
+        filter.minVal = valInput;
+        filter.minChg = chgInput;
+    }
+
+    // --- RENDER ENGINE ---
+    const canvas = document.getElementById('rtCanvas');
+    const ctx = canvas.getContext('2d');
+    let width, height;
+
+    function resize() {
+        const parent = document.getElementById('tape-container');
+        const dpr = window.devicePixelRatio || 1;
+        width = parent.clientWidth;
+        height = parent.clientHeight;
+        
+        canvas.width = width * dpr;
+        canvas.height = height * dpr;
+        ctx.scale(dpr, dpr);
+        canvas.style.width = width + 'px';
+        canvas.style.height = height + 'px';
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, width, height);
+
+        // --- GRID CONFIGURATION ---
+        // Must match CSS Grid: 100px | 90px | 120px | 110px | 110px | 1fr
+        const pad = 20; // Matches padding in CSS
+        
+        // Left Aligned Columns
+        const xTime = pad;
+        const xCode = pad + 100;
+        
+        // Right Aligned Columns (Position = Previous Widths Sum - Padding)
+        const w1 = 100, w2 = 90, w3 = 120, w4 = 110, w5 = 110;
+        
+        const xPrice = pad + w1 + w2 + w3 - 10; // -10 for breathing room on right
+        const xChg = pad + w1 + w2 + w3 + w4 - 10;
+        const xVol = pad + w1 + w2 + w3 + w4 + w5 - 10;
+        const xVal = width - pad; // Align to far right edge
+
+        ctx.font = `bold ${CONFIG.fontSize}px "Courier New", monospace`;
+        
+        // Filter trades
+        const visibleTrades = trades.filter(t => {
+            if (filter.minVol > 0 && t.vol < filter.minVol) return false;
+            if (filter.minVal > 0 && t.value < filter.minVal) return false;
+            
+            if (filter.minChg !== 0) {
+                if (filter.minChg > 0 && t.changePct < filter.minChg) return false;
+                if (filter.minChg < 0 && t.changePct > filter.minChg) return false;
+            }
+
+            if (filter.code !== '' && !t.code.includes(filter.code)) return false;
+            return true;
+        });
+
+        let drawnCount = 0;
+
+        visibleTrades.forEach((trade) => {
+            const rowY = drawnCount * CONFIG.rowHeight;
+            const textY = rowY + (CONFIG.rowHeight / 2) + 5;
+            
+            if (rowY > height) return;
+
+            // 1. Separator Line
+            ctx.fillStyle = CONFIG.colors.separator;
+            ctx.fillRect(0, rowY + CONFIG.rowHeight - 1, width, 1);
+
+            // 2. Time (Gray)
+            ctx.textAlign = 'left';
+            ctx.fillStyle = CONFIG.colors.muted;
+            ctx.fillText(trade.time, xTime, textY);
+
+            // 3. Code (Color Coded by Action)
+            ctx.fillStyle = trade.side === 'buy' ? CONFIG.colors.green : CONFIG.colors.red;
+            ctx.fillText(trade.code, xCode, textY);
+
+            // 4. Price (Color Coded by Change)
+            ctx.textAlign = 'right';
+            if (trade.change > 0) ctx.fillStyle = CONFIG.colors.green;
+            else if (trade.change < 0) ctx.fillStyle = CONFIG.colors.red;
+            else ctx.fillStyle = CONFIG.colors.text;
+            
+            ctx.fillText(trade.price.toLocaleString(), xPrice, textY);
+
+            // 5. Change %
+            const sign = trade.change > 0 ? '+' : '';
+            const pctStr = trade.change !== 0 ? sign + trade.changePct.toFixed(1) + '%' : '0%';
+            ctx.fillText(pctStr, xChg, textY);
+
+            // 6. Volume (Color Coded by Size)
+            ctx.fillStyle = trade.vol > 1000 ? CONFIG.colors.yellow : CONFIG.colors.text;
+            ctx.fillText(trade.vol.toLocaleString(), xVol, textY);
+
+            // 7. Value
+            ctx.fillStyle = CONFIG.colors.text;
+            ctx.fillText(formatLargeValue(trade.value), xVal, textY);
+
+            drawnCount++;
+        });
+
+        requestAnimationFrame(draw);
+    }
+
+    // --- INITIALIZATION ---
+    window.addEventListener('resize', resize);
+    resize();
+    draw();
+
+    // High Speed Engine
+    setInterval(generateTrade, 100);
+
+</script>
+</body>
+</html>

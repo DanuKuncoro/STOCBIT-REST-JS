@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STOCBIT PRO | Terminal</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        /* [KEEP YOUR PREVIOUS CSS STYLES HERE] */
+        /* Only listing changed/critical CSS for brevity */
+        :root {
+            --bg-base: #0b0e11; 
+            --bg-gradient: radial-gradient(circle at 50% 30%, #1f2630 0%, #0b0e11 80%);
+            --panel-bg: rgba(21, 26, 31, 0.65);
+            --panel-border: rgba(255, 255, 255, 0.08);
+            --header-bg: rgba(30, 35, 41, 0.85);
+            --font-main: 'Roboto', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+            --text-primary: #EAECEF;
+            --text-secondary: #848E9C;
+            --color-up: #0ECB81; --color-down: #F6465D; --color-acc: #F0B90B;
+            --bg-strong: rgba(14, 203, 129, 0.12); --bg-moderate: rgba(240, 185, 11, 0.12);
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; background: var(--bg-base); background-image: var(--bg-gradient); font-family: var(--font-main); color: var(--text-primary); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        nav.top-bar { height: 45px; border-bottom: 1px solid var(--panel-border); background: rgba(11, 14, 17, 0.9); backdrop-filter: blur(10px); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; z-index: 50; }
+        .brand { font-size: 16px; font-weight: 800; letter-spacing: 1px; color: var(--text-primary); display: flex; align-items: center; gap: 10px; }
+        .brand span { color: var(--color-acc); }
+        .market-status { font-size: 12px; font-family: var(--font-mono); color: var(--color-up); display: flex; align-items: center; gap: 8px; }
+        .blink { animation: blinker 2s linear infinite; }
+        @keyframes blinker { 50% { opacity: 0; } }
+        .workspace { flex: 1; display: grid; grid-template-columns: 40% 60%; gap: 1px; background-color: var(--panel-border); position: relative; }
+        @media (max-width: 900px) { .workspace { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; } }
+        .widget { background: var(--panel-bg); display: flex; flex-direction: column; position: relative; backdrop-filter: blur(5px); min-width: 0; }
+        .widget-header { padding: 8px 15px; border-bottom: 1px solid var(--panel-border); display: flex; justify-content: space-between; align-items: center; background: var(--header-bg); height: 40px; flex-shrink: 0; }
+        .w-title { font-size: 13px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+        .w-controls button { background: rgba(255,255,255,0.05); border: 1px solid var(--panel-border); color: var(--text-secondary); font-size: 10px; padding: 4px 8px; border-radius: 4px; cursor: pointer; transition: 0.2s; }
+        .w-controls button:hover, .w-controls button.active { color: var(--text-primary); border-color: var(--color-acc); background: rgba(255,255,255,0.1); }
+        .filter-bar { display: none; background: rgba(15, 20, 25, 0.95); border-bottom: 1px solid var(--panel-border); padding: 8px 15px; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 11px; color: var(--text-secondary); z-index: 20; flex-shrink: 0; }
+        .filter-bar.show { display: flex; }
+        .f-group { display: flex; align-items: center; gap: 6px; }
+        .f-input { background: rgba(255,255,255,0.05); border: 1px solid var(--panel-border); color: var(--text-primary); padding: 4px 8px; border-radius: 3px; font-family: var(--font-mono); font-size: 11px; width: 70px; outline: none; }
+        .f-input:focus { border-color: var(--color-acc); }
+        .f-select { width: 90px; cursor: pointer; }
+        .table-head { display: flex; padding: 0; border-bottom: 1px solid var(--panel-border); background: rgba(20, 25, 30, 0.5); font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: var(--text-secondary); height: 32px; flex-shrink: 0; }
+        .th-dynamic { display: flex; align-items: center; padding: 0 10px; height: 100%; white-space: nowrap; overflow: hidden; border-right: 1px solid transparent; }
+        .align-right { justify-content: flex-end; text-align: right; }
+        .align-left { justify-content: flex-start; text-align: left; }
+        .canvas-area { flex: 1; position: relative; overflow: hidden; }
+        canvas { display: block; width: 100%; height: 100%; }
+    </style>
+</head>
+<body>
+
+    <nav class="top-bar">
+        <div class="brand">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F0B90B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline>
+                <polyline points="16 7 22 7 22 13"></polyline>
+            </svg>
+            STOCBIT <span>PRO</span>
+        </div>
+        <div class="market-status">
+            <span class="blink" id="status-dot">●</span> 
+            <span id="status-text">CONNECTING...</span>
+            <span style="color:var(--text-secondary); margin-left:15px;" id="clock-display">00:00:00</span>
+        </div>
+    </nav>
+
+    <div class="workspace">
+        
+        <div class="widget">
+            <div class="widget-header">
+                <div class="w-title">Market Cluster</div>
+                <div class="w-controls">
+                    <button id="btn-cluster-filter" onclick="toggleFilter('cluster')">FILTER</button>
+                </div>
+            </div>
+            
+            <div class="filter-bar" id="bar-cluster">
+                <div class="f-group"><span>CODE:</span><input type="text" class="f-input" id="c-code" onkeyup="updateClusterFilter()"></div>
+                <div class="f-group"><span>FREQ:</span><input type="number" class="f-input" id="c-freq" onkeyup="updateClusterFilter()"></div>
+                <div class="f-group"><span>VAL(M):</span><input type="number" class="f-input" id="c-threshold" value="100" onkeyup="updateClusterFilter()"></div>
+                <div class="f-group">
+                    <select class="f-input f-select" id="c-strength" onchange="updateClusterFilter()">
+                        <option value="ALL">ALL</option>
+                        <option value="MODERATE">MODERATE+</option>
+                        <option value="STRONG">STRONG</option>
+                    </select>
+                </div>
+            </div>
+            <div class="table-head" id="headers-cluster"></div>
+            <div class="canvas-area"><canvas id="canvas-cluster"></canvas></div>
+        </div>
+
+        <div class="widget">
+            <div class="widget-header">
+                <div class="w-title">Running Trade</div>
+                <div class="w-controls">
+                    <button id="btn-tape-filter" onclick="toggleFilter('tape')">FILTER</button>
+                    <button id="btn-pause" onclick="togglePause()">PAUSE</button>
+                </div>
+            </div>
+            <div class="filter-bar" id="bar-tape">
+                <div class="f-group"><span>CODE:</span><input type="text" class="f-input" id="t-code" onkeyup="updateTapeFilter()"></div>
+                <div class="f-group"><span>MIN VOL:</span><input type="number" class="f-input" id="t-vol" onkeyup="updateTapeFilter()"></div>
+                <div class="f-group"><span>YEL VOL:</span><input type="number" class="f-input" id="t-vol-color" value="1000" onkeyup="updateTapeFilter()"></div>
+                <div class="f-group"><span>VAL(M):</span><input type="number" class="f-input" id="t-val" onkeyup="updateTapeFilter()"></div>
+                <div class="f-group"><span>YEL VAL(M):</span><input type="number" class="f-input" id="t-val-color" value="100" onkeyup="updateTapeFilter()"></div>
+                <div class="f-group"><span>CHG%:</span><input type="number" class="f-input" id="t-chg" step="0.1" onkeyup="updateTapeFilter()"></div>
+            </div>
+            <div class="table-head" id="headers-tape"></div>
+            <div class="canvas-area"><canvas id="canvas-tape"></canvas></div>
+        </div>
+
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+
+<script>
+    // --- UTILS ---
+    const Utils = {
+        fmtVal: (v) => v >= 1e9 ? (v/1e9).toFixed(2)+' B' : (v >= 1e6 ? (v/1e6).toFixed(2)+' M' : (v >= 1e3 ? (v/1e3).toFixed(0)+' K' : v)),
+        getTime: () => new Date().toLocaleTimeString('en-GB', { hour12: false })
+    };
+
+    const THEME = {
+        font: "500 13px 'JetBrains Mono', monospace",
+        fontBold: "700 13px 'JetBrains Mono', monospace",
+        cText: '#EAECEF', cMuted: '#616876', cBuy: '#0ECB81', cSell: '#F6465D', cAcc: '#F0B90B',
+        bgStrong: 'rgba(14, 203, 129, 0.12)', bgMod: 'rgba(240, 185, 11, 0.12)', line: 'rgba(255, 255, 255, 0.05)'
+    };
+
+    // --- WIDGET LOGIC ---
+    class TradeWidget {
+        constructor(canvasId, headerId, defaultCols, compactCols, rowHeight = 32) {
+            this.canvas = document.getElementById(canvasId);
+            this.ctx = this.canvas.getContext('2d', { alpha: true });
+            this.headerEl = document.getElementById(headerId);
+            this.container = this.canvas.parentElement;
+            this.data = [];
+            this.defaultCols = defaultCols; this.compactCols = compactCols; this.currentCols = defaultCols; 
+            this.rowHeight = rowHeight; this.filters = {};
+            this.init();
+        }
+        init() { window.addEventListener('resize', () => this.resize()); this.resize(); this.renderLoop(); }
+        resize() {
+            const dpr = window.devicePixelRatio || 1;
+            const w = this.container.clientWidth; const h = this.container.clientHeight;
+            const newCols = (w < 500) ? this.compactCols : this.defaultCols;
+            if (newCols !== this.currentCols || !this.colWidths) this.currentCols = newCols;
+            this.width = w; this.height = h;
+            this.canvas.width = w * dpr; this.canvas.height = h * dpr;
+            this.ctx.scale(dpr, dpr);
+            this.canvas.style.width = w + 'px'; this.canvas.style.height = h + 'px';
+            this.colWidths = this.currentCols.map(c => Math.floor(w * c.pct));
+            const total = this.colWidths.reduce((a,b)=>a+b,0);
+            if (total < w) this.colWidths[this.colWidths.length-1] += (w - total);
+            this.renderHeaders();
+        }
+        renderHeaders() {
+            this.headerEl.innerHTML = '';
+            this.currentCols.forEach((col, i) => {
+                const d = document.createElement('div');
+                d.className = `th-dynamic align-${col.align}`;
+                d.innerText = col.label;
+                d.style.width = this.colWidths[i] + 'px';
+                if(col.pl) d.style.paddingLeft = col.pl + 'px';
+                this.headerEl.appendChild(d);
+            });
+        }
+        addData(item) { this.data.unshift(item); if (this.data.length > 60) this.data.pop(); }
+        setFilters(f) { this.filters = {...this.filters, ...f}; }
+        renderLoop() { this.draw(); requestAnimationFrame(() => this.renderLoop()); }
+        getX(colIndex) {
+            let x = 0;
+            for(let i=0; i<colIndex; i++) x += this.colWidths[i];
+            const col = this.currentCols[colIndex];
+            if (col.align === 'right') return x + this.colWidths[colIndex] - 10;
+            if (col.align === 'left') return x + (col.pl || 10);
+            return x + (this.colWidths[colIndex]/2);
+        }
+        draw() {} 
+    }
+
+    // --- CONFIGS ---
+    const TAPE_COLS = [
+        { label: 'TIME', pct: 0.12, align: 'left' }, { label: 'CODE', pct: 0.12, align: 'left' },
+        { label: 'PRICE', pct: 0.15, align: 'right' }, { label: 'CHG%', pct: 0.15, align: 'right' },
+        { label: 'VOL', pct: 0.15, align: 'right' }, { label: 'VALUE', pct: 0.31, align: 'right' }
+    ];
+    const TAPE_COMPACT = [
+        { label: 'TIME', pct: 0.20, align: 'left' }, { label: 'CODE', pct: 0.20, align: 'left' },
+        { label: 'PRICE', pct: 0.30, align: 'right' }, { label: 'VAL', pct: 0.30, align: 'right' }
+    ];
+    const CLUSTER_COLS = [
+        { label: 'TIME', pct: 0.15, align: 'left' }, { label: 'CODE', pct: 0.15, align: 'left' },
+        { label: 'FREQ', pct: 0.15, align: 'right' }, { label: 'PRICE', pct: 0.20, align: 'right' },
+        { label: 'STRENGTH', pct: 0.35, align: 'left', pl: 20 }
+    ];
+    const CLUSTER_COMPACT = [
+        { label: 'TIME', pct: 0.20, align: 'left' }, { label: 'CODE', pct: 0.20, align: 'left' },
+        { label: 'PRICE', pct: 0.25, align: 'right' }, { label: 'STRENGTH', pct: 0.35, align: 'left', pl: 10 }
+    ];
+
+    // --- IMPLEMENTATIONS ---
+    class TapeWidget extends TradeWidget {
+        constructor() { super('canvas-tape', 'headers-tape', TAPE_COLS, TAPE_COMPACT, 32); }
+        draw() {
+            this.ctx.clearRect(0, 0, this.width, this.height);
+            this.ctx.font = THEME.font; this.ctx.textBaseline = 'middle';
+            let y = 0;
+            const hasVol = this.currentCols.find(c => c.label === 'VOL');
+            const hasChg = this.currentCols.find(c => c.label === 'CHG%');
+            for (let i = 0; i < this.data.length; i++) {
+                const d = this.data[i];
+                if (y > this.height) break;
+                if (this.filters.code && !d.code.includes(this.filters.code)) continue;
+                if (this.filters.minVol && d.vol < this.filters.minVol) continue;
+                if (this.filters.minVal && d.value < this.filters.minVal) continue;
+                if (this.filters.minChg) {
+                   if (this.filters.minChg > 0 && d.changePct < this.filters.minChg) continue;
+                   if (this.filters.minChg < 0 && d.changePct > this.filters.minChg) continue;
+                }
+                const ty = y + (this.rowHeight/2) + 1;
+                this.ctx.fillStyle = THEME.line; this.ctx.fillRect(0, y + this.rowHeight - 1, this.width, 1);
+                let cIdx = 0;
+                this.ctx.textAlign = 'left'; this.ctx.fillStyle = THEME.cMuted; this.ctx.fillText(d.time, this.getX(cIdx++), ty);
+                this.ctx.fillStyle = d.side === 'buy' ? THEME.cBuy : THEME.cSell; this.ctx.fillText(d.code, this.getX(cIdx++), ty);
+                this.ctx.textAlign = 'right'; this.ctx.fillStyle = d.change > 0 ? THEME.cBuy : (d.change < 0 ? THEME.cSell : THEME.cText);
+                this.ctx.fillText(d.price.toLocaleString(), this.getX(cIdx++), ty);
+                if (hasChg) {
+                    const sign = d.change > 0 ? '+' : ''; this.ctx.fillText(`${sign}${d.changePct.toFixed(1)}%`, this.getX(cIdx++), ty);
+                }
+                if (hasVol) {
+                    const colorThreshold = this.filters.volColor || 1000; this.ctx.fillStyle = d.vol >= colorThreshold ? THEME.cAcc : THEME.cText;
+                    this.ctx.fillText(d.vol.toLocaleString(), this.getX(cIdx++), ty);
+                }
+                const valColorThreshold = this.filters.valColor || 100_000_000;
+                this.ctx.fillStyle = d.value >= valColorThreshold ? THEME.cAcc : THEME.cText;
+                this.ctx.fillText(Utils.fmtVal(d.value), this.getX(cIdx++), ty);
+                y += this.rowHeight;
+            }
+        }
+    }
+
+    class ClusterWidget extends TradeWidget {
+        constructor() { super('canvas-cluster', 'headers-cluster', CLUSTER_COLS, CLUSTER_COMPACT, 36); this.filters.thresholdVal = 100_000_000; }
+        getStrength(val) {
+            const T = this.filters.thresholdVal || 100_000_000;
+            if (val >= T) return { l:'STRONG', i:'●', c: THEME.cBuy, bg: THEME.bgStrong };
+            if (val >= T*0.25) return { l:'MODERATE', i:'⚡', c: THEME.cAcc, bg: THEME.bgMod };
+            return { l:'LOW', i:'∿', c: THEME.cMuted, bg: null };
+        }
+        draw() {
+            this.ctx.clearRect(0, 0, this.width, this.height);
+            this.ctx.font = THEME.font; this.ctx.textBaseline = 'middle';
+            let y = 0; const hasFreq = this.currentCols.find(c => c.label === 'FREQ');
+            for (let i = 0; i < this.data.length; i++) {
+                const d = this.data[i];
+                if (y > this.height) break;
+                const str = this.getStrength(d.value);
+                if (this.filters.code && !d.code.includes(this.filters.code)) continue;
+                if (this.filters.minFreq && d.freq < this.filters.minFreq) continue;
+                if (this.filters.mode === 'STRONG' && str.l !== 'STRONG') continue;
+                if (this.filters.mode === 'MODERATE' && str.l === 'LOW') continue;
+                if (str.bg) { this.ctx.fillStyle = str.bg; this.ctx.fillRect(0, y, this.width, this.rowHeight); }
+                this.ctx.fillStyle = THEME.line; this.ctx.fillRect(0, y + this.rowHeight - 1, this.width, 1);
+                const ty = y + (this.rowHeight/2) + 1; let cIdx = 0;
+                this.ctx.textAlign = 'left'; this.ctx.fillStyle = THEME.cMuted; this.ctx.fillText(d.time, this.getX(cIdx++), ty);
+                this.ctx.fillStyle = d.side === 'buy' ? THEME.cBuy : THEME.cSell;
+                this.ctx.font = THEME.fontBold; this.ctx.fillText(d.code, this.getX(cIdx++), ty); this.ctx.font = THEME.font;
+                if (hasFreq) { this.ctx.textAlign = 'right'; this.ctx.fillStyle = THEME.cText; this.ctx.fillText(d.freq, this.getX(cIdx++), ty); }
+                this.ctx.textAlign = 'right'; this.ctx.fillStyle = d.side === 'buy' ? THEME.cBuy : THEME.cSell;
+                this.ctx.fillText(d.price.toLocaleString(), this.getX(cIdx++), ty);
+                this.ctx.textAlign = 'left'; this.ctx.fillStyle = str.c; this.ctx.fillText(`${str.i} ${str.l}`, this.getX(cIdx++), ty);
+                y += this.rowHeight;
+            }
+        }
+    }
+
+    // --- MAIN ENGINE ---
+    const tape = new TapeWidget();
+    const cluster = new ClusterWidget();
+
+    function toggleFilter(type) {
+        document.getElementById(`bar-${type}`).classList.toggle('show');
+        document.getElementById(`btn-${type}-filter`).classList.toggle('active');
+        setTimeout(() => { tape.resize(); cluster.resize(); }, 50);
+    }
+    
+    // --- PAUSE LOGIC ---
+    let isPaused = false;
+    const pauseBtn = document.getElementById('btn-pause');
+
+    function togglePause() {
+        isPaused = !isPaused;
+        pauseBtn.innerText = isPaused ? "RESUME" : "PAUSE";
+        pauseBtn.classList.toggle('active');
+    }
+
+    function updateClusterFilter() {
+        cluster.setFilters({
+            code: document.getElementById('c-code').value.toUpperCase(),
+            minFreq: parseInt(document.getElementById('c-freq').value) || 0,
+            thresholdVal: (parseFloat(document.getElementById('c-threshold').value) || 100) * 1_000_000,
+            mode: document.getElementById('c-strength').value
+        });
+    }
+
+    function updateTapeFilter() {
+        tape.setFilters({
+            code: document.getElementById('t-code').value.toUpperCase(),
+            minVol: parseInt(document.getElementById('t-vol').value) || 0,
+            volColor: parseInt(document.getElementById('t-vol-color').value) || 1000, 
+            minVal: (parseFloat(document.getElementById('t-val').value) || 0) * 1_000_000,
+            valColor: (parseFloat(document.getElementById('t-val-color').value) || 100) * 1_000_000, 
+            minChg: parseFloat(document.getElementById('t-chg').value) || 0
+        });
+    }
+
+    setInterval(() => document.getElementById('clock-display').innerText = Utils.getTime(), 1000);
+
+    // --- SOCKET INTEGRATION ---
+    const socket = io();
+    const statusDot = document.getElementById('status-dot');
+    const statusText = document.getElementById('status-text');
+
+    socket.on('connect', () => {
+        statusDot.style.color = THEME.cBuy; statusText.innerText = "LIVE FEED";
+        statusText.style.color = THEME.cBuy; statusDot.classList.add('blink');
+    });
+
+    socket.on('disconnect', () => {
+        statusDot.style.color = THEME.cSell; statusText.innerText = "DISCONNECTED";
+        statusText.style.color = THEME.cSell; statusDot.classList.remove('blink');
+    });
+
+    socket.on('market_update', (alerts) => {
+        // ✨ THE PAUSE GATE: Blocks EVERYTHING (Running Trade AND Cluster)
+        if(isPaused) return;
+
+        alerts.forEach(alert => {
+            const dateObj = new Date(alert.time);
+            const timeStr = dateObj.toLocaleTimeString('en-GB', { hour12: false });
+
+            if (alert.type === 'CLUSTER') {
+                cluster.addData({
+                    time: timeStr,
+                    code: alert.symbol,
+                    price: alert.price,
+                    side: alert.side,
+                    freq: alert.freq,
+                    value: alert.value
+                });
+            } else {
+                tape.addData({
+                    time: timeStr,
+                    code: alert.symbol,
+                    price: alert.price,
+                    vol: alert.volume,
+                    value: alert.valueRaw,
+                    change: alert.change,
+                    changePct: alert.change && alert.price ? (alert.change / (alert.price - alert.change)) * 100 : 0,
+                    side: alert.change >= 0 ? 'buy' : 'sell'
+                });
+            }
+        });
+    });
+
+</script>
+</body>
+</html>
